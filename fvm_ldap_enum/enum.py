@@ -70,8 +70,7 @@ $$ |         \$  /   $$ | \_/ $$ |      $$$$$$$$\ $$$$$$$  |$$ |  $$ |$$ |      
     def args(self):
         parser = argparse.ArgumentParser()
         parser.add_argument('-DC', '--domaincontroller', type=str, help="Domain Controller")
-        parser.add_argument('-a', '--anon', action='store_true', help="anonymous")
-        parser.add_argument('-H', '--hash', help="anonymous")
+        parser.add_argument('-H', '--hash', help="hash")
         parser.add_argument('-U', '--username', help="Username")
         parser.add_argument('-P', '--password', help="Password")
         self.args = parser.parse_args()
@@ -103,57 +102,6 @@ $$ |         \$  /   $$ | \_/ $$ |      $$$$$$$$\ $$$$$$$  |$$ |  $$ |$$ |      
                 except (ConnectionRefusedError, AttributeError, OSError):
                     pass
         print(header("\n[info] Scan of the provided subnet is complete. Try to use any identified IP addresses for additional enumeration."))
-
-    def anonymous_bind(self, hostname):
-        try:
-            self.t1 = datetime.now()
-            s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            socket.setdefaulttimeout(5)
-            try:
-                s.connect(hostname, 636)
-                server_val = f'ldaps://{hostname}:636'
-                self.server = Server(str(f'{server_val}'),
-                                     port=636, use_ssl=True, get_info=ALL)
-            except:
-                self.server = Server(str(hostname), get_info=ALL)
-            self.conn = Connection(self.server, auto_bind=True)
-            with open(f"{hostname}.ldapdump.txt", 'w') as f:
-                f.write(str(self.server.info))
-            print("[info] Let's try to identify a domain naming convention for the domain.\n")
-            with open(f"{hostname}.ldapdump.txt", 'r') as f:
-                for line in f:
-                    if line.startswith("    DC="):
-                        self.name_context = line.strip()
-                        self.long_dc = self.name_context
-                        self.dc_val = (self.name_context.count('DC='))
-                        self.name_context = self.name_context.replace(
-                            "DC=", "")
-                        self.name_context = self.name_context.replace(",", ".")
-                        if "ForestDnsZones" in self.name_context:
-                            continue
-                        else:
-                            break
-                    if "dNSHostName" in self.name_context:
-                        print(self.server.info)
-            self.domain = self.name_context
-            domain_contents = self.domain.split(".")
-            print(f"[success] Possible domain name found - {self.name_context}\n")
-            
-            self.dom_1 = f"{self.long_dc}"
-            print(f'[info] All set for now. Come back with credentials to dump additional domain information. Full raw output saved as {hostname}.ldapdump.txt\n')
-            self.t2 = datetime.now()
-            total = self.t2 - self.t1
-            total = str(total)
-            print( f"LDAP enumeration completed in {total}.\n")
-        except (ipaddress.AddressValueError, socket.herror):
-            print("[error] Invalid IP Address or unable to contact host. Please try again.")
-            quit()
-        except socket.timeout:
-            print( "[error] Timeout while trying to contact the host. Please try again.")
-            quit()
-        except Exception as e:
-            print(f"[error] - {e}")
-            quit()
 
     def authenticated_bind(self, hostname, username, password):
         self.t1 = datetime.now()
@@ -221,6 +169,7 @@ $$ |         \$  /   $$ | \_/ $$ |      $$$$$$$$\ $$$$$$$  |$$ |  $$ |$$ |      
         self.admin_count_search()
         self.find_fields()
         self.find_ad_printers()
+        self.find_password_policy()
 
     def ntlm_bind(self, hostname, username, password):
         try:
@@ -473,6 +422,13 @@ $$ |         \$  /   $$ | \_/ $$ |      $$$$$$$$\ $$$$$$$  |$$ |  $$ |$$ |      
         for entry in self.conn.entries:
             print(entry)
 
+    def find_password_policy(self):
+        print('\n[info] Pass policy.\n')
+        attributes = ['forceLogoff', 'lockoutDuration', 'lockOutObservationWindow', 'lockoutThreshold', 'maxPwdAge', 'minPwdAge', 'minPwdLength', 'pwdHistoryLength', 'pwdProperties']
+# Perform the LDAP search
+        self.conn.search(f"{self.dom_1}", '(objectClass=*)', attributes=attributes)
+        print(str(self.conn.entries))
+
     def stop_enum(self):
         self.t2 = datetime.now()
         total = self.t2 - self.t1
@@ -486,9 +442,7 @@ $$ |         \$  /   $$ | \_/ $$ |      $$$$$$$$\ $$$$$$$  |$$ |  $$ |$$ |      
         self.banner()
         # if self.args.domaincontroller:
         #     self.check_ports(self.args.domaincontroller)
-        if self.args.anon:
-            self.anonymous_bind(self.args.domaincontroller)
-        elif self.args.hash:
+        if self.args.hash:
             if not ":" in self.args.hash:
                 self.password = f"aad3b435b51404eeaad3b435b51404ee:{self.args.hash}"
             self.ntlm_bind(self.args.domaincontroller, self.username, self.password)
