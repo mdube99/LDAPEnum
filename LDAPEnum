@@ -70,11 +70,12 @@ class LDAPEnum():
         parser.add_argument('-U', '--users', action='store_true', help="Print out domain users.")
         parser.add_argument('-G', '--groups', action='store_true', help="Print out domain groups.")
         parser.add_argument('-C', '--computers', action='store_true', help="Print out domain computers.")
+        parser.add_argument('-A', '--all', action='store_true', help="Print all available options")
         # parser.add_argument('-O', '--obfuscate', action='store_true', help="Obfuscate Queries. Default: Will not obfuscate.")
         parser.add_argument('-S', '--subnets', action='store_true', help="Print out subnets.")
         parser.add_argument('--gpo', action='store_true', help="Print out Grou Policy Objects")
         parser.add_argument('-L', '--laps', action='store_true', help="Print out LAPS information.")
-        if len(sys.argv)<=3:
+        if len(sys.argv)<=5:
             parser.print_help(sys.stderr)
             sys.exit(1)
         self.args = parser.parse_args()
@@ -559,6 +560,14 @@ class LDAPEnum():
         self.admin_count_search()
         self.find_fields()
         self.find_ad_printers()
+        if self.args.all:
+            self.find_password_policy()
+            self.get_all_users()
+            self.get_all_computers()
+            self.get_all_groups()
+            self.get_subnets()
+            self.get_gpo()
+            self.get_laps()
         if self.args.passpol:
             self.find_password_policy()
         if self.args.users:
