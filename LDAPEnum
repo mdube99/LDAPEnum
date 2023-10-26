@@ -72,7 +72,7 @@ class LDAPEnum():
         parser.add_argument('-U', '--users', action='store_true', help="Print out domain users.")
         parser.add_argument('-G', '--groups', action='store_true', help="Print out domain groups.")
         parser.add_argument('-C', '--computers', action='store_true', help="Print out domain computers.")
-        parser.add_argument('-O', '--obfuscate', action='store_true', help="Obfuscate Queries. Default: Will not obfuscate.")
+        parser.add_argument('-O', '--obfuscate', action='store_true', help="(Experimental) Obfuscate LDAP Queries")
         parser.add_argument('-S', '--subnets', action='store_true', help="Print out subnets.")
         parser.add_argument('--gpo', action='store_true', help="Print out Group Policy Objects")
         parser.add_argument('-L', '--laps', action='store_true', help="Print out LAPS information.")
