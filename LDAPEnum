@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+import subprocess
 import ipaddress
 from ldap3 import Server, Connection, ALL, NTLM
 import ldap3
@@ -71,9 +72,9 @@ class LDAPEnum():
         parser.add_argument('-U', '--users', action='store_true', help="Print out domain users.")
         parser.add_argument('-G', '--groups', action='store_true', help="Print out domain groups.")
         parser.add_argument('-C', '--computers', action='store_true', help="Print out domain computers.")
-        # parser.add_argument('-O', '--obfuscate', action='store_true', help="Obfuscate Queries. Default: Will not obfuscate.")
+        parser.add_argument('-O', '--obfuscate', action='store_true', help="Obfuscate Queries. Default: Will not obfuscate.")
         parser.add_argument('-S', '--subnets', action='store_true', help="Print out subnets.")
-        parser.add_argument('--gpo', action='store_true', help="Print out Grou Policy Objects")
+        parser.add_argument('--gpo', action='store_true', help="Print out Group Policy Objects")
         parser.add_argument('-L', '--laps', action='store_true', help="Print out LAPS information.")
         parser.add_argument('-W', '--writes', action='store_true', help="Print out validated writes")
         if len(sys.argv)<=5:
@@ -86,17 +87,43 @@ class LDAPEnum():
         self.password = self.args.password
 
     def __search_ldap_server(self, OBJ_TO_SEARCH: str, ATTRI_TO_SEARCH: str | list) -> None:
-        # if self.args.obfuscate:
-        #     # find everything between = and )
-        #     query = re.findall(r'\((.*?)\)', OBJ_TO_SEARCH)
-        #     # Turn first value from query into hex
-        #     obfuscated_query = query[0].split("=")[1].encode('utf-8').hex(sep='\\')
-        #
-        #     new = query[0].split("=")[1]
-        #     newnew = f"={new})"
-        #     # replace query with obfuscated query
-        #     bar = str(f"=\\{obfuscated_query})")
-        #     OBJ_TO_SEARCH = OBJ_TO_SEARCH.replace(newnew, bar)
+        "ldap server searching"
+
+        # obfuscation is highly experimental. May not always work.
+        # LDAP can read some queries via hex, which will be harder for EDR to alert on.
+        # Obfuscations are also case sensitive.
+        # Obfuscation searching for 'objectCategory' will not work against 'objectcategory'
+        
+        if self.args.obfuscate:
+            # find everything between 'memberof= and )'
+            memberof = re.findall(r'memberof=([^)]*)', OBJ_TO_SEARCH)
+            if memberof:
+                for object in memberof:
+                    obfuscated_query = object[0].encode('utf-8').hex(sep='\\')
+                    # Turn first value from query into hex
+                    orig_query = f'memberof={object}'
+                    new_query = f'memberof=\\{obfuscated_query}'
+                    OBJ_TO_SEARCH = OBJ_TO_SEARCH.replace(orig_query, new_query)
+                    # OBJ_TO_SEARCH = OBJ_TO_SEARCH.replace(object, obfuscated_query)
+
+            objectcategory = re.findall(r'objectCategory=([^)]*)', OBJ_TO_SEARCH)
+            if objectcategory:
+                for object in objectcategory:
+                    obfuscated_query = object.encode('utf-8').hex(sep='\\')
+                    orig_query = f'objectCategory={object}'
+                    new_query = f'objectCategory=\\{obfuscated_query}'
+                    OBJ_TO_SEARCH = OBJ_TO_SEARCH.replace(orig_query, new_query)
+                    # OBJ_TO_SEARCH = OBJ_TO_SEARCH.replace(object, obfuscated_query)
+
+            serviceprincipalname = re.findall(r'servicePrincipalName=([^)]*)', OBJ_TO_SEARCH)
+            if serviceprincipalname:
+                for object in serviceprincipalname:
+                    obfuscated_query = object.encode('utf-8').hex(sep='\\')
+                    # Turn first value from query into hex
+                    orig_query = f'objectCategory={object}'
+                    new_query = f'objectCategory=\\{obfuscated_query}'
+                    OBJ_TO_SEARCH = OBJ_TO_SEARCH.replace(orig_query, new_query)
+                    # OBJ_TO_SEARCH = OBJ_TO_SEARCH.replace(object, obfuscated_query)
 
         self.ldapconn.search(self.ldap_domain_name, OBJ_TO_SEARCH, attributes=ATTRI_TO_SEARCH)
 
@@ -225,6 +252,7 @@ class LDAPEnum():
     def kerberoast_accounts(self) -> None:
         # Query LDAP for Kerberoastable users - searching for SPNs where user is a normal user and account is not disabled
         OBJ_TO_SEARCH = '(&(&(servicePrincipalName=*)(UserAccountControl:1.2.840.113556.1.4.803:=512))(!(UserAccountControl:1.2.840.113556.1.4.803:=2)))'
+
         ATTRI_TO_SEARCH = ldap3.ALL_ATTRIBUTES
         self.__search_ldap_server(OBJ_TO_SEARCH, ATTRI_TO_SEARCH)
         if not self.ldapconn.entries:
@@ -254,7 +282,7 @@ class LDAPEnum():
 
     def server_search(self) -> None:
         # Query LDAP for computer accounts
-        OBJ_TO_SEARCH = '(&(objectClass=computer)(!(objectclass=msDS-ManagedServiceAccount)))'
+        OBJ_TO_SEARCH = '(&(objectClass=computer)(!(objectClass=msDS-ManagedServiceAccount)))'
         ATTRI_TO_SEARCH = ['name', 'operatingsystem']
         self.__search_ldap_server(OBJ_TO_SEARCH, ATTRI_TO_SEARCH)
         ldap_entries = self.ldapconn.entries
@@ -322,11 +350,11 @@ class LDAPEnum():
 
     def admin_count_search(self) -> None:
         # Query LDAP for users with adminCount=1
-        OBJ_TO_SEARCH = '(&(!(memberof=Builtin))(adminCount=1)(objectclass=person)(objectCategory=Person))'
+        OBJ_TO_SEARCH = '(&(!(memberof=Builtin))(adminCount=1)(objectClass=person)(objectCategory=Person))'
         ATTRI_TO_SEARCH = ldap3.ALL_ATTRIBUTES
         self.__search_ldap_server(OBJ_TO_SEARCH, ATTRI_TO_SEARCH)
         ldap_entries = self.ldapconn.entries
-        print(success('Protected Admin Users'))
+        print(success('Users with adminCount=1 (DA, EA)'))
         ldap_entries = str(ldap_entries)
         for admin_count_val in self.ldapconn.entries:
             print(admin_count_val.name)
@@ -396,7 +424,7 @@ class LDAPEnum():
 
     def get_all_users(self) -> None:
         print(success('All Domain Users'))
-        OBJ_TO_SEARCH = '(&(objectclass=user)(objectcategory=person)(objectcategory=user))'
+        OBJ_TO_SEARCH = '(&(objectClass=user)(objectCategory=person)(objectCategory=user))'
         ATTRI_TO_SEARCH = ['name', 'sAMAccountName', 'whencreated', 'whenchanged']
         self.__search_ldap_server(OBJ_TO_SEARCH, ATTRI_TO_SEARCH)
 # Perform the LDAP search
@@ -415,7 +443,7 @@ class LDAPEnum():
 
     def get_all_computers(self) -> None:
         print(success('All Domain Computers'))
-        OBJ_TO_SEARCH = '(&(objectclass=computer))'
+        OBJ_TO_SEARCH = '(&(objectClass=computer))'
         ATTRI_TO_SEARCH = ['sAMAccountName', 'name','operatingSystem','operatingSystemServicePack','whencreated', 'whenchanged']
         self.__search_ldap_server(OBJ_TO_SEARCH, ATTRI_TO_SEARCH)
 # Perform the LDAP search
@@ -436,7 +464,7 @@ class LDAPEnum():
 
     def get_all_groups(self) -> None:
         print(success('All Domain Groups'))
-        OBJ_TO_SEARCH = '(&(objectclass=group))'
+        OBJ_TO_SEARCH = '(&(objectClass=group))'
         ATTRI_TO_SEARCH = ['sAMAccountName', 'name','whencreated', 'whenchanged']
         self.__search_ldap_server(OBJ_TO_SEARCH, ATTRI_TO_SEARCH)
         self.dir_name = f"{self.name_context}"
@@ -458,7 +486,7 @@ class LDAPEnum():
     def get_subnets(self) -> None:
         "untested"
         print(success('Subnets Found'))
-        OBJ_TO_SEARCH = '(&(objectclass=subnet))'
+        OBJ_TO_SEARCH = '(&(objectClass=subnet))'
         ATTRI_TO_SEARCH = ldap3.ALL_ATTRIBUTES
         self.__search_ldap_server(OBJ_TO_SEARCH, ATTRI_TO_SEARCH)
         self.dir_name = f"{self.name_context}"
@@ -484,7 +512,7 @@ class LDAPEnum():
     def get_gpo(self) -> None:
         "untested"
         print(success('GPOs Found'))
-        OBJ_TO_SEARCH = '(&(objectclass=groupPolicyContainer))'
+        OBJ_TO_SEARCH = '(&(objectClass=groupPolicyContainer))'
         ATTRI_TO_SEARCH = ['displayname', 'gPCFileSysPath', 'versionNumber', 'Name', 'gPLink', 'whencreated', 'whenchanged']
         self.__search_ldap_server(OBJ_TO_SEARCH, ATTRI_TO_SEARCH)
         self.dir_name = f"{self.name_context}"
@@ -511,7 +539,6 @@ class LDAPEnum():
 
     def get_laps(self) -> None:
         "untested"
-        print(success('GPOs Found'))
         OBJ_TO_SEARCH = '(&(objectCategory=person)(objectClass=user)(msDS-SupportedEncryptionTypes=*))'
         ATTRI_TO_SEARCH = ['msDS-SupportedEncryptionTypes', 'sAMAccountName']
         self.__search_ldap_server(OBJ_TO_SEARCH, ATTRI_TO_SEARCH)
@@ -519,6 +546,7 @@ class LDAPEnum():
         if not self.ldapconn.entries:
             print(error("No LAPS Found"))
         else:
+            print(success('Found LAPS Information'))
             try:
                 if os.path.exists(f"LAPS.txt"):
                     os.remove(f"LAPS.txt")
@@ -569,6 +597,19 @@ class LDAPEnum():
         print(success(f"LDAP Enumeration completed in {total}"))
         self.ldapconn.unbind()
         quit()
+
+    def setup_impacket(self, dc_ip) -> list:
+        impacket_args = []
+        if dc_ip:
+            impacket_args.append("-dc-ip")
+            impacket_args.append(dc_ip)
+        process =  subprocess.run(impacket_args, check=True, stdout=subprocess.PIPE)
+        return process.stdout.decode().splitlines()
+
+    def exploit_kerberoastable(self, targetUser: str, username: str, password: str, service:str, output_file: str) -> bool:
+        successful = False
+        # stripped_username = 
+        print(username)
 
     def main(self) -> None:
         self.args()
