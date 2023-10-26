@@ -1,1 +1,6 @@
-*.txt
+LAPS.txt
+computers.txt
+group_policy.txt
+groups.txt
+passpol.txt
+users.txt
