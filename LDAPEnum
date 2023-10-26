@@ -2,7 +2,7 @@
 
 import ipaddress
 import socket
-from ldap3 import Server, Connection, ALL, NTLM
+from ldap3 import SUBTREE, Server, Connection, ALL, NTLM
 import ldap3
 from datetime import datetime
 import os
@@ -21,8 +21,8 @@ class colors:
     ENDC = '\033[0m'
     BOLD = '\033[1m'
 
-def header(msg: str) -> str:
-    return colors.HEADER + msg + colors.ENDC
+def green(msg: str) -> str:
+    return colors.OKGREEN + msg + colors.ENDC
 
 def bold(msg: str) -> str:
     return colors.BOLD + msg + colors.ENDC
@@ -52,7 +52,7 @@ class LDAPEnum():
         pass
 
     def banner(self):
-        print(bold(header('''
+        print(bold(green('''
  /$$       /$$$$$$$   /$$$$$$  /$$$$$$$  /$$$$$$$$                                  
 | $$      | $$__  $$ /$$__  $$| $$__  $$| $$_____/                                  
 | $$      | $$  \ $$| $$  \ $$| $$  \ $$| $$       /$$$$$$$  /$$   /$$ /$$$$$$/$$$$ 
@@ -71,11 +71,14 @@ class LDAPEnum():
         parser.add_argument('-H', '--hash', help="hash")
         parser.add_argument('-u', '--username', help="Username")
         parser.add_argument('-p', '--password', help="Password")
-        parser.add_argument('-P', '--passpol', action='store_true', help="Print out users. Default: will only output to file.")
-        parser.add_argument('-U', '--users', action='store_true', help="Print out users. Default: will only output to file.")
-        parser.add_argument('-G', '--groups', action='store_true', help="Print out groups. Default: will only output to file.")
-        parser.add_argument('-C', '--computers', action='store_true', help="Print out computers. Default: will only output to file.")
+        parser.add_argument('-P', '--passpol', action='store_true', help="Print out users.fault: will only output to file.")
+        parser.add_argument('-U', '--users', action='store_true', help="Print out users.")
+        parser.add_argument('-G', '--groups', action='store_true', help="Print out groups.")
+        parser.add_argument('-C', '--computers', action='store_true', help="Print out computers.fault: will only output to file.")
         parser.add_argument('-O', '--obfuscate', action='store_true', help="Obfuscate Queries. Default: Will not obfuscate.")
+        parser.add_argument('-S', '--subnets', action='store_true', help="Print out subnets.")
+        parser.add_argument('--gpo', action='store_true', help="Print out Grou Policy Objects")
+        parser.add_argument('-L', '--laps', action='store_true', help="Print out LAPS information.")
         self.args = parser.parse_args()
 
         self.hostname = self.args.domaincontroller
@@ -83,19 +86,19 @@ class LDAPEnum():
         self.password = self.args.password
 
     def __search_ldap_server(self, OBJ_TO_SEARCH: str, ATTRI_TO_SEARCH: str | list) -> None:
-        if self.args.obfuscate:
-            # find everything between = and )
-            query = re.findall(r'\((.*?)\)', OBJ_TO_SEARCH)
-            # Turn first value from query into hex
-            obfuscated_query = query[0].split("=")[1].encode('utf-8').hex(sep='\\')
+        # if self.args.obfuscate:
+        #     # find everything between = and )
+        #     query = re.findall(r'\((.*?)\)', OBJ_TO_SEARCH)
+        #     # Turn first value from query into hex
+        #     obfuscated_query = query[0].split("=")[1].encode('utf-8').hex(sep='\\')
+        #
+        #     new = query[0].split("=")[1]
+        #     newnew = f"={new})"
+        #     # replace query with obfuscated query
+        #     bar = str(f"=\\{obfuscated_query})")
+        #     OBJ_TO_SEARCH = OBJ_TO_SEARCH.replace(newnew, bar)
 
-            new = query[0].split("=")[1]
-            newnew = f"={new})"
-            # replace query with obfuscated query
-            bar = str(f"=\\{obfuscated_query})")
-            OBJ_TO_SEARCH = OBJ_TO_SEARCH.replace(newnew, bar)
-
-        self.ldapconn.search(self.dom_1, OBJ_TO_SEARCH, attributes=ATTRI_TO_SEARCH)
+        self.ldapconn.search(self.ldap_domain_name, OBJ_TO_SEARCH, attributes=ATTRI_TO_SEARCH)
 
     def authenticated_bind(self, hostname: str, username: str, password: str) -> None:
         self.begintime = datetime.now()
@@ -115,12 +118,12 @@ class LDAPEnum():
                 self.ldapconn = Connection(self.server, auto_bind=True)
                 print(check_success("LDAP connection successful"))
             except Exception as e:
-                print(f"LDAPS on port 636 also failed with error: {e}")
+                print(f"LDAP connection failed with error: {e}")
 
-        with open(f"{hostname}.LDAPDump.txt", 'w') as f:
+        with open(f"{hostname}.txt", 'w') as f:
             f.write(str(self.server.info))
-        print(check_success("Attempting to identify a domain naming convention...\n" + colors.ENDC))
-        with open(f"{hostname}.LDAPDump.txt", 'r') as f:
+        print(check_success("Attempting to identify a domain naming convention\n"))
+        with open(f"{hostname}.txt", 'r') as f:
             for line in f:
                 if line.startswith("    DC="):
                     self.name_context = line.strip()
@@ -139,7 +142,7 @@ class LDAPEnum():
         domain_contents = self.domain.split(".")
         print(check_success(f"Possible domain name found"))
         print(self.name_context)
-        self.dom_1 = f"{self.long_dc}"
+        self.ldap_domain_name = f"{self.long_dc}"
         try:
             self.ldapconn = Connection(
                 self.server, user=f"{domain_contents[self.dc_val - 2]}\\{username}", password=password, auto_bind=True)
@@ -155,17 +158,25 @@ class LDAPEnum():
             self.begintime = datetime.now()
             s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             socket.setdefaulttimeout(5)
+            # tries LDAPS
             try:
                 host_with_port = f'ldaps://{hostname}:636'
-                self.server = Server(str(f'{host_with_port}'),
-                                     port=636, use_ssl=True, get_info=ALL)
+                self.server = Server(str(host_with_port), port=636, use_ssl=True, get_info=ALL)
+                self.ldapconn = Connection(self.server, auto_bind=True)
             except:
-                self.server = Server(str(hostname), get_info=ALL)
+                try:
+                    print(check_error("LDAPS connection failed, attempting LDAP..."))
+                    host_with_port = f'ldap://{hostname}:389'
+                    self.server = Server(str(host_with_port), port=389, use_ssl=True, get_info=ALL)
+                    self.ldapconn = Connection(self.server, auto_bind=True)
+                    print(check_success("LDAP connection successful"))
+                except Exception as e:
+                    print(f"LDAP connection failed with error: {e}")
             self.ldapconn = Connection(self.server, auto_bind=True)
-            with open(f"{hostname}.ldapdump.txt", 'w') as f:
+            with open(f"{hostname}.txt", 'w') as f:
                 f.write(str(self.server.info))
             print(success("Let's try to identify a domain naming convention for the domain.\n"))
-            with open(f"{hostname}.ldapdump.txt", 'r') as f:
+            with open(f"{hostname}.txt", 'r') as f:
                 for line in f:
                     if line.startswith("    DC="):
                         self.name_context = line.strip()
@@ -183,17 +194,14 @@ class LDAPEnum():
             print(success(f'Creating a folder named {self.dir_name} to host file output.\n'))
             try:
                 os.mkdir(self.dir_name)
-                os.rename(f"{hostname}.ldapdump.txt",
-                          f"ldapdump.txt")
             except FileExistsError:
-                os.remove(f"ldapdump.txt")
-                os.rename(f"{hostname}.ldapdump.txt",
-                          f"ldapdump.txt")
+                os.remove(f"{hostname}.txt")
                 pass
             self.domain = self.name_context
             domain_contents = self.domain.split(".")
             print(success(f"Possible domain name found - {self.name_context}"))
-            self.dom_1 = f"{self.long_dc}"
+            self.ldap_domain_name = f"{self.long_dc}"
+            print(self.long_dc)
             try:
                 self.ldapconn = Connection(
                     self.server, user=f"{self.domain}\\{username}", password=password, auto_bind=True, authentication=NTLM)
@@ -213,9 +221,6 @@ class LDAPEnum():
         # except Exception as e:
         #     print(f"[error] - {e}")
         #     quit()
-
-
-
 
     def kerberoast_accounts(self) -> None:
         # Query LDAP for Kerberoastable users - searching for SPNs where user is a normal user and account is not disabled
@@ -307,23 +312,30 @@ class LDAPEnum():
             print(error('No MSSQL Servers Found'))
         else:
             print(success('MSSQL Servers'))
+            # if os.path.exists(f"mssqlservers.txt"):
+            #     os.remove(f"mssqlservers.txt")
+            # with open(f"mssqlservers.txt", 'r+') as f:
+            #     comp_val = 0
+            #     for line in f:
+            #         if line.startswith('    dNSHostName: '):
+            #             comp_name = line.strip()
+            #             comp_name = comp_name.replace('dNSHostName: ', '')
+            #             comp_name = comp_name.replace('$', '')
+            #             print(comp_name)
+            #             comp_val += 1
+            #             if comp_val >= 25:
+            #                 print(success(f'Truncating results at 25. Check {self.domain}.computers.txt for full details.'))
+            #                 break
+            #     f.close()
             if os.path.exists(f"mssqlservers.txt"):
                 os.remove(f"mssqlservers.txt")
             with open(f"mssqlservers.txt", 'a') as f:
-                f.write(str(self.ldapconn.entries))
-                f.close()
-            with open(f"mssqlservers.txt", 'r+') as f:
-                comp_val = 0
-                for line in f:
-                    if line.startswith('    dNSHostName: '):
-                        comp_name = line.strip()
-                        comp_name = comp_name.replace('dNSHostName: ', '')
-                        comp_name = comp_name.replace('$', '')
-                        print(comp_name)
-                        comp_val += 1
-                        if comp_val >= 25:
-                            print(success(f'Truncating results at 25. Check {self.domain}.computers.txt for full details.'))
-                            break
+                print(check_success('Output mssqlservers to file'))
+                for entry in self.ldapconn.entries:
+                    dNSHostName = str(entry.dNSHostName)
+
+                    f.write(dNSHostName + '\n')
+                    print(dNSHostName)
                 f.close()
         print("")
 
@@ -333,7 +345,6 @@ class LDAPEnum():
         ATTRI_TO_SEARCH = ldap3.ALL_ATTRIBUTES
         self.__search_ldap_server(OBJ_TO_SEARCH, ATTRI_TO_SEARCH)
         ldap_entries = self.ldapconn.entries
-        # print('\n' + '-'*29 + 'Protected Admin Users' + '-'*29 + '\n\nThese are user accounts with adminCount=1 set\n')
         print(success('Protected Admin Users'))
         ldap_entries = str(ldap_entries)
         for admin_count_val in self.ldapconn.entries:
@@ -433,7 +444,7 @@ class LDAPEnum():
     def get_all_computers(self) -> None:
         print(success('All Domain Computers'))
         OBJ_TO_SEARCH = '(&(objectclass=computer))'
-        ATTRI_TO_SEARCH = [ 'sAMAccountName', 'name','operatingSystem','operatingSystemServicePack','whencreated', 'whenchanged']
+        ATTRI_TO_SEARCH = ['sAMAccountName', 'name','operatingSystem','operatingSystemServicePack','whencreated', 'whenchanged']
         self.__search_ldap_server(OBJ_TO_SEARCH, ATTRI_TO_SEARCH)
 # Perform the LDAP search
         self.dir_name = f"{self.name_context}"
@@ -454,7 +465,7 @@ class LDAPEnum():
     def get_all_groups(self) -> None:
         print(success('All Domain Groups'))
         OBJ_TO_SEARCH = '(&(objectclass=group))'
-        ATTRI_TO_SEARCH = [ 'sAMAccountName', 'name','whencreated', 'whenchanged']
+        ATTRI_TO_SEARCH = ['sAMAccountName', 'name','whencreated', 'whenchanged']
         self.__search_ldap_server(OBJ_TO_SEARCH, ATTRI_TO_SEARCH)
         self.dir_name = f"{self.name_context}"
         if os.path.exists(f"groups.txt"):
@@ -469,6 +480,75 @@ class LDAPEnum():
                 f.write(group + '\n')
                 # splitting on space will only show the date, rather than date and time
                 print(f'Group: {group}.\tCreated: {whencreated.split(" ")[0]}')
+            f.close()
+        print("")
+
+    def get_subnets(self) -> None:
+        "untested"
+        print(success('Subnets Found'))
+        OBJ_TO_SEARCH = '(&(objectclass=subnet))'
+        ATTRI_TO_SEARCH = ldap3.ALL_ATTRIBUTES
+        self.__search_ldap_server(OBJ_TO_SEARCH, ATTRI_TO_SEARCH)
+        self.dir_name = f"{self.name_context}"
+        if os.path.exists(f"subnets.txt"):
+            os.remove(f"subnets.txt")
+        # with open(f"subnets.txt", 'a') as f:
+        #     print(check_success('Output subnets to file'))
+        print(str(self.ldapconn.entries))
+        #     for entry in self.ldapconn.entries:
+        #         group = str(entry.sAMAccountname)
+        #         whencreated = str(entry.whencreated)
+        #
+        #         # Print one samaccount per line
+        #         f.write(group + '\n')
+        #         # splitting on space will only show the date, rather than date and time
+        #         print(f'Group: {group}.\tCreated: {whencreated.split(" ")[0]}')
+            # f.close()
+        print("")
+
+    def get_gpo(self) -> None:
+        "untested"
+        print(success('GPOs Found'))
+        OBJ_TO_SEARCH = '(&(objectclass=groupPolicyContainer))'
+        ATTRI_TO_SEARCH = ['displayname', 'gPCFileSysPath', 'versionNumber', 'Name', 'gPLink', 'whencreated', 'whenchanged']
+        self.__search_ldap_server(OBJ_TO_SEARCH, ATTRI_TO_SEARCH)
+        self.dir_name = f"{self.name_context}"
+        if os.path.exists(f"group_policy.txt"):
+            os.remove(f"group_policy.txt")
+        with open(f"group_policy.txt", 'a') as f:
+            print(check_success('Output GPOs to file'))
+            for entry in self.ldapconn.entries:
+                displayname = str(entry.displayName)
+                name = str(entry.name)
+
+                # Print one samaccount per line
+                f.write(str(entry) + '\n')
+                # splitting on space will only show the date, rather than date and time
+                print("----")
+                print(displayname)
+                print(name)
+            f.close()
+            print("----")
+        print("")
+
+    def get_laps(self) -> None:
+        "untested"
+        print(success('GPOs Found'))
+        OBJ_TO_SEARCH = '(&(objectCategory=person)(objectClass=user)(msDS-SupportedEncryptionTypes=*))'
+        ATTRI_TO_SEARCH = ['msDS-SupportedEncryptionTypes', 'sAMAccountName']
+        self.__search_ldap_server(OBJ_TO_SEARCH, ATTRI_TO_SEARCH)
+        self.dir_name = f"{self.name_context}"
+        if os.path.exists(f"LAPS.txt"):
+            os.remove(f"LAPS.txt")
+        with open(f"LAPS.txt", 'a') as f:
+            print(check_success('Output LAPS Info to file'))
+            for entry in self.ldapconn.entries:
+                samaccount = str(entry.samaccount)
+
+                # Print one samaccount per line
+                f.write(str(samaccount) + '\n')
+                # splitting on space will only show the date, rather than date and time
+                print(samaccount)
             f.close()
         print("")
 
@@ -495,20 +575,26 @@ class LDAPEnum():
         self.kerberoast_accounts()
         self.asreproast_accounts()
         self.server_search()
-        self.dc_search()
         self.mssql_search()
+        self.dc_search()
         self.admin_count_search()
         self.find_fields()
         self.find_ad_printers()
+        # self.store_password_cleartext()
         if self.args.passpol:
             self.find_password_policy()
-        # self.store_password_cleartext()
         if self.args.users:
             self.get_all_users()
         if self.args.computers:
             self.get_all_computers()
         if self.args.groups:
             self.get_all_groups()
+        if self.args.subnets:
+            self.get_subnets()
+        if self.args.gpo:
+            self.get_gpo()
+        if self.args.laps:
+            self.get_laps()
         self.stop_enum()
 
 if __name__ == "__main__":
