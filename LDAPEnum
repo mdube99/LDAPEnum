@@ -60,17 +60,17 @@ class LDAPEnum():
         ''' + colors.ENDC)
 
     def args(self) -> None:
-        parser = argparse.ArgumentParser('''python3 LDAPEnum.py -D 10.10.0.44 -u test -p test -PUG
+        parser = argparse.ArgumentParser('''python3 LDAPEnum.py -D 10.10.0.44 -u test -p test -A
         ''')
         parser.add_argument('-D', '--domaincontroller', type=str, help="Domain Controller")
         parser.add_argument('-H', '--hash', help="hash")
         parser.add_argument('-u', '--username', help="Username")
         parser.add_argument('-p', '--password', help="Password")
+        parser.add_argument('-A', '--all', action='store_true', help="Print all available options")
         parser.add_argument('-P', '--passpol', action='store_true', help="Print out users.fault: will only output to file.")
         parser.add_argument('-U', '--users', action='store_true', help="Print out domain users.")
         parser.add_argument('-G', '--groups', action='store_true', help="Print out domain groups.")
         parser.add_argument('-C', '--computers', action='store_true', help="Print out domain computers.")
-        parser.add_argument('-A', '--all', action='store_true', help="Print all available options")
         # parser.add_argument('-O', '--obfuscate', action='store_true', help="Obfuscate Queries. Default: Will not obfuscate.")
         parser.add_argument('-S', '--subnets', action='store_true', help="Print out subnets.")
         parser.add_argument('--gpo', action='store_true', help="Print out Grou Policy Objects")
@@ -124,6 +124,7 @@ class LDAPEnum():
             f.write(str(self.server.info))
         print(check_success("Attempting to identify a domain naming convention\n"))
         with open(f"{hostname}.txt", 'r') as f:
+        # From msLDAPDump
             for line in f:
                 if line.startswith("    DC="):
                     self.name_context = line.strip()
@@ -142,6 +143,7 @@ class LDAPEnum():
         domain_contents = self.domain.split(".")
         print(check_success(f"Possible domain name found"))
         print(self.name_context)
+        print("")
         self.ldap_domain_name = f"{self.long_dc}"
         try:
             self.ldapconn = Connection(
@@ -176,7 +178,8 @@ class LDAPEnum():
             self.ldapconn = Connection(self.server, auto_bind=True)
             with open(f"{hostname}.txt", 'w') as f:
                 f.write(str(self.server.info))
-            print(success("Let's try to identify a domain naming convention for the domain.\n"))
+            print(success("Attempting to identify a domain naming convention for the domain.\n"))
+            # From msLDAPDump
             with open(f"{hostname}.txt", 'r') as f:
                 for line in f:
                     if line.startswith("    DC="):
