@@ -63,19 +63,19 @@ class LDAPEnum():
 |________/|_______/ |__/  |__/|__/      |________/|__/  |__/ \______/ |__/ |__/ |__/
 
         ''')))
-        print("Author: Mark Dube\n")
 
     def args(self):
-        parser = argparse.ArgumentParser()
+        parser = argparse.ArgumentParser('''python3 LDAPEnum.py -D 10.10.0.44 -PUG
+        ''')
         parser.add_argument('-D', '--domaincontroller', type=str, help="Domain Controller")
         parser.add_argument('-H', '--hash', help="hash")
         parser.add_argument('-u', '--username', help="Username")
         parser.add_argument('-p', '--password', help="Password")
         parser.add_argument('-P', '--passpol', action='store_true', help="Print out users.fault: will only output to file.")
-        parser.add_argument('-U', '--users', action='store_true', help="Print out users.")
-        parser.add_argument('-G', '--groups', action='store_true', help="Print out groups.")
-        parser.add_argument('-C', '--computers', action='store_true', help="Print out computers.fault: will only output to file.")
-        parser.add_argument('-O', '--obfuscate', action='store_true', help="Obfuscate Queries. Default: Will not obfuscate.")
+        parser.add_argument('-U', '--users', action='store_true', help="Print out domain users.")
+        parser.add_argument('-G', '--groups', action='store_true', help="Print out domain groups.")
+        parser.add_argument('-C', '--computers', action='store_true', help="Print out domain computers.")
+        # parser.add_argument('-O', '--obfuscate', action='store_true', help="Obfuscate Queries. Default: Will not obfuscate.")
         parser.add_argument('-S', '--subnets', action='store_true', help="Print out subnets.")
         parser.add_argument('--gpo', action='store_true', help="Print out Grou Policy Objects")
         parser.add_argument('-L', '--laps', action='store_true', help="Print out LAPS information.")
@@ -389,18 +389,6 @@ class LDAPEnum():
             print("Unable to find Password Policy")
         print("")
 
-
-    def store_password_cleartext(self) -> None:
-        print(success('Potential Cleartext Passwords'))
-        OBJ_TO_SEARCH = '(&(objectclass=user)(objectCategory=*)(useraccountcontrol=128))'
-        ATTRI_TO_SEARCH = ['sAMAccountName', 'displayname', 'lastlogontimestamp', 'lastlogon', 'whencreated', 'whenchanged']
-        self.__search_ldap_server(OBJ_TO_SEARCH, ATTRI_TO_SEARCH)
-# Perform the LDAP search
-        ldap_entries = str(self.ldapconn.entries)
-        self.dir_name = f"{self.name_context}"
-        print(ldap_entries)
-        print("")
-
     def get_all_users(self) -> None:
         print(success('All Domain Users'))
         OBJ_TO_SEARCH = '(&(objectclass=user)(objectcategory=person)(objectcategory=user))'
@@ -559,7 +547,6 @@ class LDAPEnum():
         self.admin_count_search()
         self.find_fields()
         self.find_ad_printers()
-        # self.store_password_cleartext()
         if self.args.passpol:
             self.find_password_policy()
         if self.args.users:
