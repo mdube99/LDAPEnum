@@ -42,10 +42,10 @@ def success(msg: str) -> str:
     return colors.OKGREEN + this + colors.ENDC + '\n'
 
 class LDAPEnum():
-    def __init__(self):
+    def __init__(self) -> None:
         pass
 
-    def banner(self):
+    def banner(self) -> None:
         print(colors.BOLD + colors.OKGREEN + '''
  /$$       /$$$$$$$   /$$$$$$  /$$$$$$$  /$$$$$$$$                                  
 | $$      | $$__  $$ /$$__  $$| $$__  $$| $$_____/                                  
@@ -58,7 +58,7 @@ class LDAPEnum():
 
         ''' + colors.ENDC)
 
-    def args(self):
+    def args(self) -> None:
         parser = argparse.ArgumentParser('''python3 LDAPEnum.py -D 10.10.0.44 -PUG
         ''')
         parser.add_argument('-D', '--domaincontroller', type=str, help="Domain Controller")
@@ -112,7 +112,7 @@ class LDAPEnum():
                 self.ldapconn = Connection(self.server, auto_bind=True)
                 print(check_success("LDAP connection successful"))
             except Exception as e:
-                print(check_error(f"LDAP connection failed with error: {e}"))
+                print(check_error(f"LDAP connection failed: {e}"))
                 quit()
 
         with open(f"{hostname}.txt", 'w') as f:
@@ -167,6 +167,7 @@ class LDAPEnum():
                     print(check_success("LDAP connection successful"))
                 except Exception as e:
                     print(f"Connection failed: {e}")
+                    quit()
             self.ldapconn = Connection(self.server, auto_bind=True)
             with open(f"{hostname}.txt", 'w') as f:
                 f.write(str(self.server.info))
@@ -201,21 +202,16 @@ class LDAPEnum():
                 self.ldapconn = Connection(
                     self.server, user=f"{self.domain}\\{username}", password=password, auto_bind=True, authentication=NTLM)
                 self.ldapconn.bind()
-            except ldap3.core.exceptions.LDAPBindError:
+            except:
                 print("Invalid credentials. Please try again.")
                 quit()
 
         except (ipaddress.AddressValueError, socket.herror):
-            print(
-                "[error] Invalid IP Address or unable to contact host. Please try again.")
+            print(check_error("Invalid IP Address or unable to contact host. Please try again."))
             quit()
         except socket.timeout:
-            print(
-                "[error] Timeout while trying to contact the host. Please try again.")
+            print(check_error("Timeout while trying to contact the host. Please try again."))
             quit()
-        # except Exception as e:
-        #     print(f"[error] - {e}")
-        #     quit()
 
     def kerberoast_accounts(self) -> None:
         # Query LDAP for Kerberoastable users - searching for SPNs where user is a normal user and account is not disabled
@@ -232,10 +228,9 @@ class LDAPEnum():
                 print(kerb_users.sAMAccountName)
         print("")
 
-    def asreproast_accounts(self):
+    def asreproast_accounts(self) -> None:
         # Query LDAP for ASREPRoastable Users
         OBJ_TO_SEARCH = '(&(objectClass=user)(userAccountControl:1.2.840.113556.1.4.803:=4194304)(!(UserAccountControl:1.2.840.113556.1.4.803:=2)))'
-
         ATTRI_TO_SEARCH = 'sAMAccountName'
         self.__search_ldap_server(OBJ_TO_SEARCH, ATTRI_TO_SEARCH)
         if not self.ldapconn.entries:
