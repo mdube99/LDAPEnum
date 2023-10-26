@@ -282,27 +282,6 @@ class LDAPEnum():
                 print(dc_accounts.name)
         print("")
 
-    def trusted_domains(self) -> None:
-        OBJ_TO_SEARCH = '(objectclass=trusteddomain)'
-        ATTRI_TO_SEARCH = ldap3.ALL_ATTRIBUTES
-        self.__search_ldap_server(OBJ_TO_SEARCH, ATTRI_TO_SEARCH)
-        if not str(self.ldapconn.entries):
-            print(error('No Domain Trusts Found\n'))
-        else:
-            print(success('\nDomain Trusts'))
-            for trust_vals in self.ldapconn.entries:
-                if trust_vals.trustDirection == 0:
-                    trust_id = "Disabled"
-                if trust_vals.trustDirection == 1:
-                    trust_id = "<- Inbound"
-                if trust_vals.trustDirection == 2:
-                    trust_id = "-> Outbound"
-                if trust_vals.trustDirection == 3:
-                    trust_id = "<-> Bi-Directional"
-
-                    print(f"{trust_id} trust with {trust_vals.trustPartner}")
-        print("")
-
     def mssql_search(self) -> None:
         # Query LDAP for MSSQL Servers
         OBJ_TO_SEARCH = '(&(sAMAccountType=805306368)(servicePrincipalName=MSSQL*))'
