@@ -23,6 +23,6 @@ options:
   -G, --groups          Print out domain groups.
   -C, --computers       Print out domain computers.
   -S, --subnets         Print out subnets.
-  --gpo                 Print out Grou Policy Objects
+  --gpo                 Print out Group Policy Objects
   -L, --laps            Print out LAPS information.
 ```
