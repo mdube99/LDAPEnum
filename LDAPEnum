@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 
 import ipaddress
-import socket
-from ldap3 import SUBTREE, Server, Connection, ALL, NTLM
+from ldap3 import Server, Connection, ALL, NTLM
 import ldap3
 from datetime import datetime
 import os
 import os.path
+import socket
 import argparse
 import re
 
@@ -20,12 +20,6 @@ class colors:
     FAIL = '\033[91m'
     ENDC = '\033[0m'
     BOLD = '\033[1m'
-
-def green(msg: str) -> str:
-    return colors.OKGREEN + msg + colors.ENDC
-
-def bold(msg: str) -> str:
-    return colors.BOLD + msg + colors.ENDC
 
 def check_error(msg: str) -> str:
     minus = colors.FAIL + '['  + '-' + ']' + colors.ENDC + ' '
@@ -52,7 +46,7 @@ class LDAPEnum():
         pass
 
     def banner(self):
-        print(bold(green('''
+        print(colors.BOLD + colors.OKGREEN + '''
  /$$       /$$$$$$$   /$$$$$$  /$$$$$$$  /$$$$$$$$                                  
 | $$      | $$__  $$ /$$__  $$| $$__  $$| $$_____/                                  
 | $$      | $$  \ $$| $$  \ $$| $$  \ $$| $$       /$$$$$$$  /$$   /$$ /$$$$$$/$$$$ 
@@ -62,7 +56,7 @@ class LDAPEnum():
 | $$$$$$$$| $$$$$$$/| $$  | $$| $$      | $$$$$$$$| $$  | $$|  $$$$$$/| $$ | $$ | $$
 |________/|_______/ |__/  |__/|__/      |________/|__/  |__/ \______/ |__/ |__/ |__/
 
-        ''')))
+        ''' + colors.ENDC)
 
     def args(self):
         parser = argparse.ArgumentParser('''python3 LDAPEnum.py -D 10.10.0.44 -PUG
@@ -118,7 +112,8 @@ class LDAPEnum():
                 self.ldapconn = Connection(self.server, auto_bind=True)
                 print(check_success("LDAP connection successful"))
             except Exception as e:
-                print(f"LDAP connection failed with error: {e}")
+                print(check_error(f"LDAP connection failed with error: {e}"))
+                quit()
 
         with open(f"{hostname}.txt", 'w') as f:
             f.write(str(self.server.info))
@@ -171,7 +166,7 @@ class LDAPEnum():
                     self.ldapconn = Connection(self.server, auto_bind=True)
                     print(check_success("LDAP connection successful"))
                 except Exception as e:
-                    print(f"LDAP connection failed with error: {e}")
+                    print(f"Connection failed: {e}")
             self.ldapconn = Connection(self.server, auto_bind=True)
             with open(f"{hostname}.txt", 'w') as f:
                 f.write(str(self.server.info))
