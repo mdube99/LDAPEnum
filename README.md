@@ -4,9 +4,8 @@ LDAP Enumeration tool as an alternative to enum4linux.
 
 ```
 usage: python3 LDAPEnum.py -D 10.10.0.44 -u test -p test -A
-
-       [-h] [-D DOMAINCONTROLLER] [-H HASH] [-u USERNAME] [-p PASSWORD] [-A] [-P]
-       [-U] [-G] [-C] [-O] [-S] [--gpo] [-L]
+         [-h] [-D DOMAINCONTROLLER] [-H HASH] [-u USERNAME] [-p PASSWORD] [-A] [-P] [-U] [-G] [-C] [-O]
+                                                                     [--gpo] [--sid] [-L]
 
 options:
   -h, --help            show this help message and exit
@@ -23,7 +22,7 @@ options:
   -G, --groups          Print out domain groups.
   -C, --computers       Print out domain computers.
   -O, --obfuscate       (Experimental) Obfuscate LDAP Queries
-  -S, --subnets         Print out subnets.
   --gpo                 Print out Group Policy Objects
+  --sid                 Print out Domain SID
   -L, --laps            Print out LAPS information.
 ```
