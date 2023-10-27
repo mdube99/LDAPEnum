@@ -546,9 +546,9 @@ class LDAPEnum():
             print(error("No validated writes found"))
         else:
             try:
-                if os.path.exists(f"LAPS.txt"):
-                    os.remove(f"LAPS.txt")
-                with open(f"LAPS.txt", 'a') as f:
+                if os.path.exists(f"writes.txt"):
+                    os.remove(f"writes.txt")
+                with open(f"writes.txt", 'a') as f:
                     print(check_success('Validated Writes'))
                     for entry in self.ldapconn.entries:
                         name = str(entry.name)
