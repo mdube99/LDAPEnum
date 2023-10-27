@@ -75,6 +75,7 @@ class LDAPEnum():
         parser.add_argument('-S', '--subnets', action='store_true', help="Print out subnets.")
         parser.add_argument('--gpo', action='store_true', help="Print out Grou Policy Objects")
         parser.add_argument('-L', '--laps', action='store_true', help="Print out LAPS information.")
+        parser.add_argument('-W', '--writes', action='store_true', help="Print out validated writes")
         if len(sys.argv)<=5:
             parser.print_help(sys.stderr)
             sys.exit(1)
@@ -535,6 +536,32 @@ class LDAPEnum():
                 print(check_error(f"Error checking for LAPS: {e}"))
         print("")
 
+    def get_validated_writes(self) -> None:
+        "untested"
+        OBJ_TO_SEARCH = '(&(objectClass=controlAccessRight)(validAccesses=8))'
+        ATTRI_TO_SEARCH = ['name', 'rightsGuid']
+        self.__search_ldap_server(OBJ_TO_SEARCH, ATTRI_TO_SEARCH)
+        self.dir_name = f"{self.name_context}"
+        if not self.ldapconn.entries:
+            print(error("No validated writes found"))
+        else:
+            try:
+                if os.path.exists(f"LAPS.txt"):
+                    os.remove(f"LAPS.txt")
+                with open(f"LAPS.txt", 'a') as f:
+                    print(check_success('Validated Writes'))
+                    for entry in self.ldapconn.entries:
+                        name = str(entry.name)
+
+                        # Print one name per line
+                        f.write(str(name) + '\n')
+                        # splitting on space will only show the date, rather than date and time
+                        print(name)
+                    f.close()
+            except Exception as e:
+                print(check_error(f"Error checking for validated writes: {e}"))
+        print("")
+
     def stop_enum(self) -> None:
         self.endtime = datetime.now()
         total = self.endtime - self.begintime
@@ -571,6 +598,7 @@ class LDAPEnum():
             self.get_subnets()
             self.get_gpo()
             self.get_laps()
+            self.get_validated_writes()
         if self.args.passpol:
             self.find_password_policy()
         if self.args.users:
@@ -585,6 +613,8 @@ class LDAPEnum():
             self.get_gpo()
         if self.args.laps:
             self.get_laps()
+        if self.args.writes:
+            self.get_validated_writes()
         self.stop_enum()
 
 if __name__ == "__main__":
