@@ -73,10 +73,9 @@ class LDAPEnum():
         parser.add_argument('-G', '--groups', action='store_true', help="Print out domain groups.")
         parser.add_argument('-C', '--computers', action='store_true', help="Print out domain computers.")
         parser.add_argument('-O', '--obfuscate', action='store_true', help="(Experimental) Obfuscate LDAP Queries")
-        parser.add_argument('-S', '--subnets', action='store_true', help="Print out subnets.")
         parser.add_argument('--gpo', action='store_true', help="Print out Group Policy Objects")
+        parser.add_argument('--sid', action='store_true', help="Print out Domain SID")
         parser.add_argument('-L', '--laps', action='store_true', help="Print out LAPS information.")
-        parser.add_argument('-W', '--writes', action='store_true', help="Print out validated writes")
         if len(sys.argv)<=5:
             parser.print_help(sys.stderr)
             sys.exit(1)
@@ -127,7 +126,8 @@ class LDAPEnum():
 
         self.ldapconn.search(self.ldap_domain_name, OBJ_TO_SEARCH, attributes=ATTRI_TO_SEARCH)
 
-    def authenticated_bind(self, hostname: str, username: str, password: str) -> None:
+    # inspired by themayor
+    def ldap_connect_cred(self, hostname: str, username: str, password: str) -> None:
         self.begintime = datetime.now()
 
         # 5 second timeout
@@ -183,7 +183,8 @@ class LDAPEnum():
         print(check_success(f"Connected to {hostname}\n"))
 
 
-    def ntlm_bind(self, hostname: str, username: str, password: str) -> None:
+    # inspired by themayor
+    def ldap_connect_ntlm(self, hostname: str, username: str, password: str) -> None:
         try:
             self.begintime = datetime.now()
             s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -258,9 +259,7 @@ class LDAPEnum():
         if not self.ldapconn.entries:
             print(error("No Kerberoastable Users"))
         else:
-            ldap_entries = self.ldapconn.entries
             print(success("Kerberoastable Users"))
-            ldap_entries = str(ldap_entries)
             for kerb_users in self.ldapconn.entries:
                 print(kerb_users.sAMAccountName)
         print("")
@@ -273,9 +272,7 @@ class LDAPEnum():
         if not self.ldapconn.entries:
             print(error("No ASREPRoastable Users"))
         else:
-            ldap_entries = self.ldapconn.entries
             print(success("ASREPRoastable Users"))
-            ldap_entries = str(ldap_entries)
             for asrep_users in self.ldapconn.entries:
                 print(asrep_users.sAMAccountName)
         print("")
@@ -285,9 +282,7 @@ class LDAPEnum():
         OBJ_TO_SEARCH = '(&(objectClass=computer)(!(objectClass=msDS-ManagedServiceAccount)))'
         ATTRI_TO_SEARCH = ['name', 'operatingsystem']
         self.__search_ldap_server(OBJ_TO_SEARCH, ATTRI_TO_SEARCH)
-        ldap_entries = self.ldapconn.entries
         print(success("Domain Joined Servers"))
-        ldap_entries = str(ldap_entries)
         for comp_account in self.ldapconn.entries:
             comp_account1 = str(comp_account).lower()
             if "server" in comp_account1:
@@ -299,9 +294,7 @@ class LDAPEnum():
         OBJ_TO_SEARCH = '(&(objectCategory=Computer)(userAccountControl:1.2.840.113556.1.4.803:=8192))'
         ATTRI_TO_SEARCH = ldap3.ALL_ATTRIBUTES
         self.__search_ldap_server(OBJ_TO_SEARCH, ATTRI_TO_SEARCH)
-        ldap_entries = self.ldapconn.entries
         print(success('Domain Controllers'))
-        ldap_entries = str(ldap_entries)
         for dc_accounts in self.ldapconn.entries:
             try:
                 print(dc_accounts.dNSHostName)
@@ -482,32 +475,13 @@ class LDAPEnum():
                 print(f'Group: {group}.\tCreated: {whencreated.split(" ")[0]}')
             f.close()
         print("")
-
-    def get_subnets(self) -> None:
-        "untested"
-        print(success('Subnets Found'))
-        OBJ_TO_SEARCH = '(&(objectClass=subnet))'
-        ATTRI_TO_SEARCH = ldap3.ALL_ATTRIBUTES
-        self.__search_ldap_server(OBJ_TO_SEARCH, ATTRI_TO_SEARCH)
-        self.dir_name = f"{self.name_context}"
-        try:
-            if os.path.exists(f"subnets.txt"):
-                os.remove(f"subnets.txt")
-            # with open(f"subnets.txt", 'a') as f:
-            #     print(check_success('Output subnets to file'))
-            print(str(self.ldapconn.entries))
-            #     for entry in self.ldapconn.entries:
-            #         group = str(entry.sAMAccountname)
-            #         whencreated = str(entry.whencreated)
-            #
-            #         # Print one samaccount per line
-            #         f.write(group + '\n')
-            #         # splitting on space will only show the date, rather than date and time
-            #         print(f'Group: {group}.\tCreated: {whencreated.split(" ")[0]}')
-                # f.close()
-        except Exception as e:
-            print(error(f"Error getting subnets: {e}"))
-        print("")
+    def searchResEntry_to_dict(self, results):
+        data = {}
+        for attr in results['attributes']:
+            key = str(attr['type'])
+            value = str(attr['vals'][0])
+            data[key] = value
+        return data
 
     def get_gpo(self) -> None:
         "untested"
@@ -564,31 +538,25 @@ class LDAPEnum():
                 print(check_error(f"Error checking for LAPS: {e}"))
         print("")
 
-    def get_validated_writes(self) -> None:
-        "untested"
-        OBJ_TO_SEARCH = '(&(objectClass=controlAccessRight)(validAccesses=8))'
-        ATTRI_TO_SEARCH = ['name', 'rightsGuid']
+    def get_domain_sid(self) -> None:
+        OBJ_TO_SEARCH = f'(&(sAMAccountName={self.args.username}))'
+        ATTRI_TO_SEARCH = ldap3.ALL_ATTRIBUTES
         self.__search_ldap_server(OBJ_TO_SEARCH, ATTRI_TO_SEARCH)
         self.dir_name = f"{self.name_context}"
         if not self.ldapconn.entries:
-            print(error("No validated writes found"))
+            print(error("No SID Found"))
         else:
+            print(success('Found Domain SID'))
             try:
-                if os.path.exists(f"writes.txt"):
-                    os.remove(f"writes.txt")
-                with open(f"writes.txt", 'a') as f:
-                    print(check_success('Validated Writes'))
-                    for entry in self.ldapconn.entries:
-                        name = str(entry.name)
-
-                        # Print one name per line
-                        f.write(str(name) + '\n')
-                        # splitting on space will only show the date, rather than date and time
-                        print(name)
-                    f.close()
+                for entry in self.ldapconn.entries:
+                    sid = str(entry.objectSid)
+                    grab_sid = sid.split("-")[:-1]
+                    dom_sid = "-".join(grab_sid[:-1])
+                    print(dom_sid)
             except Exception as e:
-                print(check_error(f"Error checking for validated writes: {e}"))
+                print(check_error(f"Error checking for LAPS: {e}"))
         print("")
+
 
     def stop_enum(self) -> None:
         self.endtime = datetime.now()
@@ -611,6 +579,7 @@ class LDAPEnum():
         # stripped_username = 
         print(username)
 
+
     def main(self) -> None:
         self.args()
         self.banner()
@@ -619,9 +588,9 @@ class LDAPEnum():
         if self.args.hash:
             if not ":" in self.args.hash:
                 self.password = f"aad3b435b51404eeaad3b435b51404ee:{self.args.hash}"
-            self.ntlm_bind(self.args.domaincontroller, self.username, self.password)
+            self.ldap_connect_ntlm(self.args.domaincontroller, self.username, self.password)
         elif self.args.password:
-            self.authenticated_bind(self.args.domaincontroller, self.username, self.password)
+            self.ldap_connect_cred(self.args.domaincontroller, self.username, self.password)
             
         self.kerberoast_accounts()
         self.asreproast_accounts()
@@ -636,10 +605,9 @@ class LDAPEnum():
             self.get_all_users()
             self.get_all_computers()
             self.get_all_groups()
-            self.get_subnets()
             self.get_gpo()
             self.get_laps()
-            self.get_validated_writes()
+            self.get_domain_sid()
         if self.args.passpol:
             self.find_password_policy()
         if self.args.users:
@@ -648,14 +616,12 @@ class LDAPEnum():
             self.get_all_computers()
         if self.args.groups:
             self.get_all_groups()
-        if self.args.subnets:
-            self.get_subnets()
         if self.args.gpo:
             self.get_gpo()
         if self.args.laps:
             self.get_laps()
-        if self.args.writes:
-            self.get_validated_writes()
+        if self.args.sid:
+            self.get_domain_sid()
         self.stop_enum()
 
 if __name__ == "__main__":
