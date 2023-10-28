@@ -161,7 +161,7 @@ class LDAPEnum():
                 else:
                     break
         self.long_dc = self.name_context
-        self.dc_val = self.name_context.count('DC=')
+        self.dn_val_count = self.name_context.count('DC=')
         self.name_context = self.name_context.replace("DC=", "")
         self.name_context = self.name_context.replace(",", ".")
 
@@ -184,13 +184,14 @@ class LDAPEnum():
 
         self.domain = self.name_context
         domain_contents = self.domain.split(".")
-        print(check_success(f"Possible domain name found"))
-        print(self.name_context)
+        print(check_success(f"Possible domain name found - {self.name_context}"))
+        # print(success(f"Possible domain name found - {self.name_context}"))
+        print(self.long_dc)
         print("")
         self.ldap_domain_name = f"{self.long_dc}"
         try:
             self.ldapconn = Connection(
-                self.server, user=f"{domain_contents[self.dc_val - 2]}\\{username}", password=password, auto_bind=True)
+                self.server, user=f"{domain_contents[self.dn_val_count - 2]}\\{username}", password=password, auto_bind=True)
             self.ldapconn.bind()
         except ldap3.core.exceptions.LDAPBindError:
             print("Invalid credentials. Please try again.")
@@ -202,7 +203,6 @@ class LDAPEnum():
     def ldap_connect_ntlm(self, hostname: str, username: str, password: str) -> None:
         try:
             self.begintime = datetime.now()
-            s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             socket.setdefaulttimeout(5)
             # tries LDAPS
             try:
@@ -232,7 +232,7 @@ class LDAPEnum():
                     else:
                         break
             self.long_dc = self.name_context
-            self.dc_val = self.name_context.count('DC=')
+            self.dn_val_count = self.name_context.count('DC=')
             self.name_context = self.name_context.replace("DC=", "")
             self.name_context = self.name_context.replace(",", ".")
 
@@ -256,12 +256,14 @@ class LDAPEnum():
             
             self.domain = self.name_context
             domain_contents = self.domain.split(".")
-            print(success(f"Possible domain name found - {self.name_context}"))
+            print(check_success(f"Possible domain name found - {self.name_context}"))
+            # print(success(f"Possible domain name found - {self.name_context}"))
             self.ldap_domain_name = f"{self.long_dc}"
             print(self.long_dc)
+            print("")
             try:
                 self.ldapconn = Connection(
-                    self.server, user=f"{domain_contents[self.dc_val - 2]}\\{username}", password=password, auto_bind=True, authentication=NTLM)
+                    self.server, user=f"{domain_contents[self.dn_val_count - 2]}\\{username}", password=password, auto_bind=True, authentication=NTLM)
 
                 self.ldapconn.bind()
             except:
@@ -594,18 +596,18 @@ class LDAPEnum():
 
     def exploit_kerberoastable(self, targetUser: str, username: str, password: str, service:str, output_file: str) -> bool:
         successful = False
-        # stripped_username = 
+        # stripped_username = self.args.hash
         print(username)
 
 
     def main(self) -> None:
         self.args()
         self.banner()
-        # if self.args.domaincontroller:
-        #     self.check_ports(self.args.domaincontroller)
         if self.args.hash:
             if not ":" in self.args.hash:
                 self.password = f"aad3b435b51404eeaad3b435b51404ee:{self.args.hash}"
+            else:
+                self.password = self.args.hash
             self.ldap_connect_ntlm(self.args.domaincontroller, self.username, self.password)
         elif self.args.password:
             self.ldap_connect_cred(self.args.domaincontroller, self.username, self.password)
