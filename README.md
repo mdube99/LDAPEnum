@@ -1,6 +1,6 @@
 # LDAPEnum
 
-LDAP Enumeration tool as an alternative to enum4linux.
+LDAP Enumeration tool as an alternative to enum4linux. Allows for obfuscation of LDAP queries by turning certain queries into hex code.
 
 ![header](https://github.com/mdube99/LDAPEnum/blob/main/.img/header.png)
 
