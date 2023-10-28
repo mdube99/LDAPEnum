@@ -152,20 +152,36 @@ class LDAPEnum():
         with open(f"{hostname}.txt", 'w') as f:
             f.write(str(self.server.info))
         print(check_success("Attempting to identify a domain naming convention\n"))
-        with open(f"{hostname}.txt", 'r') as f:
-        # From msLDAPDump
-            for line in f:
-                if line.startswith("    DC="):
-                    self.name_context = line.strip()
-                    self.long_dc = self.name_context
-                    self.dc_val = (self.name_context.count('DC='))
-                    self.name_context = self.name_context.replace(
-                        "DC=", "")
-                    self.name_context = self.name_context.replace(",", ".")
-                    if "ForestDnsZones" in self.name_context:
-                        continue
-                    else:
-                        break
+        get_dom_info = str(self.server.info).split("\n")
+        for item in get_dom_info:
+            if "DC=" in item:
+                self.name_context = item.strip()
+                if "ForestDnsZones" in item:
+                    continue
+                else:
+                    break
+        self.long_dc = self.name_context
+        self.dc_val = self.name_context.count('DC=')
+        self.name_context = self.name_context.replace("DC=", "")
+        self.name_context = self.name_context.replace(",", ".")
+
+        # with open(f"{hostname}.txt", 'r') as f:
+        # # From msLDAPDump
+        #     for line in f:
+        #         if line.startswith("    DC="):
+        #             self.name_context = line.strip()
+        #             print("orig name_context", self.name_context)
+        #             self.long_dc = self.name_context
+        #             print("long_dc", self.long_dc)
+        #             self.dc_val = (self.name_context.count('DC='))
+        #             self.name_context = self.name_context.replace(
+        #                 "DC=", "")
+        #             self.name_context = self.name_context.replace(",", ".")
+        #             if "ForestDnsZones" in self.name_context:
+        #                 continue
+        #             else:
+        #                 break
+
         self.domain = self.name_context
         domain_contents = self.domain.split(".")
         print(check_success(f"Possible domain name found"))
@@ -206,22 +222,38 @@ class LDAPEnum():
             self.ldapconn = Connection(self.server, auto_bind=True)
             with open(f"{hostname}.txt", 'w') as f:
                 f.write(str(self.server.info))
-            print(success("Attempting to identify a domain naming convention for the domain.\n"))
-            # From msLDAPDump
-            with open(f"{hostname}.txt", 'r') as f:
-                for line in f:
-                    if line.startswith("    DC="):
-                        self.name_context = line.strip()
-                        self.long_dc = self.name_context
-                        self.dc_val = (self.name_context.count('DC='))
-                        self.name_context = self.name_context.replace(
-                            "DC=", "")
-                        self.name_context = self.name_context.replace(",", ".")
-                        if "ForestDnsZones" in self.name_context:
-                            continue
-                        else:
-                            break
-            self.domain = self.name_context
+            print(check_success("Attempting to identify a domain naming convention\n"))
+            get_dom_info = str(self.server.info).split("\n")
+            for item in get_dom_info:
+                if "DC=" in item:
+                    self.name_context = item.strip()
+                    if "ForestDnsZones" in item:
+                        continue
+                    else:
+                        break
+            self.long_dc = self.name_context
+            self.dc_val = self.name_context.count('DC=')
+            self.name_context = self.name_context.replace("DC=", "")
+            self.name_context = self.name_context.replace(",", ".")
+
+            # with open(f"{hostname}.txt", 'w') as f:
+            #     f.write(str(self.server.info))
+            # print(success("Attempting to identify a domain naming convention for the domain.\n"))
+            # # From msLDAPDump
+            # with open(f"{hostname}.txt", 'r') as f:
+            #     for line in f:
+            #         if line.startswith("    DC="):
+            #             self.name_context = line.strip()
+            #             self.long_dc = self.name_context
+            #             self.dc_val = (self.name_context.count('DC='))
+            #             self.name_context = self.name_context.replace(
+            #                 "DC=", "")
+            #             self.name_context = self.name_context.replace(",", ".")
+            #             if "ForestDnsZones" in self.name_context:
+            #                 continue
+            #             else:
+            #                 break
+            
             self.domain = self.name_context
             domain_contents = self.domain.split(".")
             print(success(f"Possible domain name found - {self.name_context}"))
@@ -229,7 +261,8 @@ class LDAPEnum():
             print(self.long_dc)
             try:
                 self.ldapconn = Connection(
-                    self.server, user=f"{self.domain}\\{username}", password=password, auto_bind=True, authentication=NTLM)
+                    self.server, user=f"{domain_contents[self.dc_val - 2]}\\{username}", password=password, auto_bind=True, authentication=NTLM)
+
                 self.ldapconn.bind()
             except:
                 print("Invalid credentials. Please try again.")
