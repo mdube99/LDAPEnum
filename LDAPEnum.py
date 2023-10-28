@@ -76,7 +76,8 @@ class LDAPEnum():
         parser.add_argument('--gpo', action='store_true', help="Print out Group Policy Objects")
         parser.add_argument('--sid', action='store_true', help="Print out Domain SID")
         parser.add_argument('-L', '--laps', action='store_true', help="Print out LAPS information.")
-        if len(sys.argv)<=5:
+
+        if len(sys.argv) <= 5:
             parser.print_help(sys.stderr)
             sys.exit(1)
         self.args = parser.parse_args()
@@ -165,9 +166,7 @@ class LDAPEnum():
                         continue
                     else:
                         break
-        self.dir_name = f"{self.name_context}"
         self.domain = self.name_context
-        print(check_success(f'Creating a folder named {self.dir_name} to host file output.\n'))
         domain_contents = self.domain.split(".")
         print(check_success(f"Possible domain name found"))
         print(self.name_context)
@@ -222,14 +221,7 @@ class LDAPEnum():
                             continue
                         else:
                             break
-            self.dir_name = f"{self.name_context}"
             self.domain = self.name_context
-            print(success(f'Creating a folder named {self.dir_name} to host file output.\n'))
-            try:
-                os.mkdir(self.dir_name)
-            except FileExistsError:
-                os.remove(f"{hostname}.txt")
-                pass
             self.domain = self.name_context
             domain_contents = self.domain.split(".")
             print(success(f"Possible domain name found - {self.name_context}"))
@@ -391,7 +383,6 @@ class LDAPEnum():
         self.__search_ldap_server(OBJ_TO_SEARCH, ATTRI_TO_SEARCH)
 # Perform the LDAP search
         ldap_entries = str(self.ldapconn.entries)
-        self.dir_name = f"{self.name_context}"
         if os.path.exists(f"passpol.txt"):
             os.remove(f"passpol.txt")
         lines = ldap_entries.split('\n')
@@ -421,7 +412,6 @@ class LDAPEnum():
         ATTRI_TO_SEARCH = ['name', 'sAMAccountName', 'whencreated', 'whenchanged']
         self.__search_ldap_server(OBJ_TO_SEARCH, ATTRI_TO_SEARCH)
 # Perform the LDAP search
-        self.dir_name = f"{self.name_context}"
         if os.path.exists(f"users.txt"):
             os.remove(f"users.txt")
         with open(f"users.txt", 'a') as f:
@@ -440,7 +430,6 @@ class LDAPEnum():
         ATTRI_TO_SEARCH = ['sAMAccountName', 'name','operatingSystem','operatingSystemServicePack','whencreated', 'whenchanged']
         self.__search_ldap_server(OBJ_TO_SEARCH, ATTRI_TO_SEARCH)
 # Perform the LDAP search
-        self.dir_name = f"{self.name_context}"
         if os.path.exists(f"computers.txt"):
             os.remove(f"computers.txt")
         with open(f"computers.txt", 'a') as f:
@@ -460,7 +449,6 @@ class LDAPEnum():
         OBJ_TO_SEARCH = '(&(objectClass=group))'
         ATTRI_TO_SEARCH = ['sAMAccountName', 'name','whencreated', 'whenchanged']
         self.__search_ldap_server(OBJ_TO_SEARCH, ATTRI_TO_SEARCH)
-        self.dir_name = f"{self.name_context}"
         if os.path.exists(f"groups.txt"):
             os.remove(f"groups.txt")
         with open(f"groups.txt", 'a') as f:
@@ -489,7 +477,6 @@ class LDAPEnum():
         OBJ_TO_SEARCH = '(&(objectClass=groupPolicyContainer))'
         ATTRI_TO_SEARCH = ['displayname', 'gPCFileSysPath', 'versionNumber', 'Name', 'gPLink', 'whencreated', 'whenchanged']
         self.__search_ldap_server(OBJ_TO_SEARCH, ATTRI_TO_SEARCH)
-        self.dir_name = f"{self.name_context}"
         try:
             if os.path.exists(f"group_policy.txt"):
                 os.remove(f"group_policy.txt")
@@ -516,7 +503,6 @@ class LDAPEnum():
         OBJ_TO_SEARCH = '(&(objectCategory=person)(objectClass=user)(msDS-SupportedEncryptionTypes=*))'
         ATTRI_TO_SEARCH = ['msDS-SupportedEncryptionTypes', 'sAMAccountName']
         self.__search_ldap_server(OBJ_TO_SEARCH, ATTRI_TO_SEARCH)
-        self.dir_name = f"{self.name_context}"
         if not self.ldapconn.entries:
             print(error("No LAPS Found"))
         else:
@@ -542,7 +528,6 @@ class LDAPEnum():
         OBJ_TO_SEARCH = f'(&(sAMAccountName={self.args.username}))'
         ATTRI_TO_SEARCH = ldap3.ALL_ATTRIBUTES
         self.__search_ldap_server(OBJ_TO_SEARCH, ATTRI_TO_SEARCH)
-        self.dir_name = f"{self.name_context}"
         if not self.ldapconn.entries:
             print(error("No SID Found"))
         else:
@@ -601,12 +586,14 @@ class LDAPEnum():
         self.find_fields()
         self.find_ad_printers()
         if self.args.all:
+            self.get_domain_sid()
             self.find_password_policy()
             self.get_all_users()
             self.get_all_computers()
             self.get_all_groups()
             self.get_gpo()
             self.get_laps()
+        if self.args.sid:
             self.get_domain_sid()
         if self.args.passpol:
             self.find_password_policy()
@@ -620,8 +607,6 @@ class LDAPEnum():
             self.get_gpo()
         if self.args.laps:
             self.get_laps()
-        if self.args.sid:
-            self.get_domain_sid()
         self.stop_enum()
 
 if __name__ == "__main__":
