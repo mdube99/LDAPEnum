@@ -2,6 +2,8 @@
 
 LDAP Enumeration tool as an alternative to enum4linux.
 
+![header](https://github.com/mdube99/LDAPEnum/blob/main/.img/header.png)
+
 ```
 usage: python3 LDAPEnum.py -D 10.10.0.44 -u test -p test -A
          [-h] [-D DOMAINCONTROLLER] [-H HASH] [-u USERNAME] [-p PASSWORD] [-A] [-P] [-U] [-G] [-C] [-O]
