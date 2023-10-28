@@ -24,11 +24,11 @@ class colors:
     BOLD = '\033[1m'
 
 def check_error(msg: str) -> str:
-    minus = colors.FAIL + '['  + '-' + ']' + colors.ENDC + ' '
+    minus = colors.FAIL + '[-]' + colors.ENDC + ' '
     return minus + msg + '\n'
 
 def check_success(msg: str) -> str:
-    plus = colors.OKGREEN + '['  + '+' + ']' + colors.ENDC + ' '
+    plus = colors.OKGREEN + '[+]' + colors.ENDC + ' '
     return plus + msg + '\n'
 
 def error(msg: str) -> str:
@@ -577,7 +577,6 @@ class LDAPEnum():
                 print(check_error(f"Error checking for LAPS: {e}"))
         print("")
 
-
     def stop_enum(self) -> None:
         self.endtime = datetime.now()
         total = self.endtime - self.begintime
@@ -598,7 +597,6 @@ class LDAPEnum():
         successful = False
         # stripped_username = self.args.hash
         print(username)
-
 
     def main(self) -> None:
         self.args()
