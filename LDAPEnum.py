@@ -400,16 +400,19 @@ class LDAPEnum():
 
     def find_ad_printers(self) -> None:
         "not tested on an environment yet"
-        print(success('Checking for printers connected to Active Directory environment'))
         OBJ_TO_SEARCH = '(&(uncName=*lon-prnt*)(objectCategory=printQueue)(printColor=TRUE))'
         ATTRI_TO_SEARCH = ldap3.ALL_ATTRIBUTES
         self.__search_ldap_server(OBJ_TO_SEARCH, ATTRI_TO_SEARCH)
-        try:
-            for entry in self.ldapconn.entries:
-                print(entry)
-        except Exception as e:
-            print(error(f"Error getting AD Printers {e}"))
-        print("")
+        if not self.ldapconn.entries:
+            print(error("No Domain joined Printers found"))
+        else:
+            print(success('Printers connected to Active Directory environment'))
+            try:
+                for entry in self.ldapconn.entries:
+                    print(entry)
+            except Exception as e:
+                print(error(f"Error getting AD Printers {e}"))
+            print("")
 
     def find_password_policy(self) -> None:
         print(success('Domain Password Policy'))
