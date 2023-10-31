@@ -601,6 +601,8 @@ class LDAPEnum():
         elif self.args.password:
             self.ldap_connect_cred(self.args.domaincontroller, self.username, self.password)
             
+        self.kerberoast_accounts()
+        self.asreproast_accounts()
         self.server_search()
         self.mssql_search()
         self.dc_search()
