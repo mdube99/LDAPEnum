@@ -93,37 +93,25 @@ class LDAPEnum():
         # LDAP can read some queries via hex, which will be harder for EDR to alert on.
         # Obfuscations are also case sensitive.
         # Obfuscation searching for 'objectCategory' will not work against 'objectcategory'
-        
+
         if self.args.obfuscate:
-            # find everything between 'memberof= and )'
-            memberof = re.findall(r'memberof=([^)]*)', OBJ_TO_SEARCH)
-            if memberof:
-                for object in memberof:
-                    obfuscated_query = object[0].encode('utf-8').hex(sep='\\')
-                    # Turn first value from query into hex
-                    orig_query = f'memberof={object}'
-                    new_query = f'memberof=\\{obfuscated_query}'
-                    OBJ_TO_SEARCH = OBJ_TO_SEARCH.replace(orig_query, new_query)
-                    # OBJ_TO_SEARCH = OBJ_TO_SEARCH.replace(object, obfuscated_query)
 
-            objectcategory = re.findall(r'objectCategory=([^)]*)', OBJ_TO_SEARCH)
-            if objectcategory:
-                for object in objectcategory:
-                    obfuscated_query = object.encode('utf-8').hex(sep='\\')
-                    orig_query = f'objectCategory={object}'
-                    new_query = f'objectCategory=\\{obfuscated_query}'
-                    OBJ_TO_SEARCH = OBJ_TO_SEARCH.replace(orig_query, new_query)
-                    # OBJ_TO_SEARCH = OBJ_TO_SEARCH.replace(object, obfuscated_query)
+            # list of queries that are obfuscatable
+            obfuscatable = ['memberof', 'objectCategory', 'servicePrincipalName']
 
-            serviceprincipalname = re.findall(r'servicePrincipalName=([^)]*)', OBJ_TO_SEARCH)
-            if serviceprincipalname:
-                for object in serviceprincipalname:
-                    obfuscated_query = object.encode('utf-8').hex(sep='\\')
+            # will loop over each obfuscatable item and check for it in OBJ_TO_SEARCH
+            for query in obfuscatable:
+                if query in OBJ_TO_SEARCH:
+                    obfuscatable_value = re.findall(f'{query}=([^)]*)', OBJ_TO_SEARCH)
                     # Turn first value from query into hex
-                    orig_query = f'objectCategory={object}'
-                    new_query = f'objectCategory=\\{obfuscated_query}'
+                    # without [0] it will return it as a list. probably a cleaner way to do this
+                    obfuscated_query = obfuscatable_value[0].encode('utf-8').hex(sep='\\')
+                    orig_query = f'{query}={obfuscatable_value[0]}'
+
+                    # e.g. objectCategory=person
+                    # objectCategory=\70\65\72\73\6f\6e
+                    new_query = f'{query}=\\{obfuscated_query}'
                     OBJ_TO_SEARCH = OBJ_TO_SEARCH.replace(orig_query, new_query)
-                    # OBJ_TO_SEARCH = OBJ_TO_SEARCH.replace(object, obfuscated_query)
 
         self.ldapconn.search(self.ldap_domain_name, OBJ_TO_SEARCH, attributes=ATTRI_TO_SEARCH)
 
@@ -613,8 +601,6 @@ class LDAPEnum():
         elif self.args.password:
             self.ldap_connect_cred(self.args.domaincontroller, self.username, self.password)
             
-        self.kerberoast_accounts()
-        self.asreproast_accounts()
         self.server_search()
         self.mssql_search()
         self.dc_search()
