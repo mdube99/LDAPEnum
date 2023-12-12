@@ -21,7 +21,7 @@ options:
   -p PASSWORD, --password PASSWORD
                         Password
   -A, --all             Print all available options
-  -P, --passpol         Print out users.fault: will only output to file.
+  -P, --passpol         Print out password policy
   -U, --users           Print out domain users.
   -G, --groups          Print out domain groups.
   -C, --computers       Print out domain computers.
