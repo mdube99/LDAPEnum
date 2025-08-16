@@ -14,6 +14,19 @@ import re
 import logging
 
 
+# Custom exception classes for LDAP operations
+class LDAPConnectionError(Exception):
+    """Raised when unable to establish network connection to LDAP server."""
+
+    pass
+
+
+class LDAPAuthenticationError(Exception):
+    """Raised when LDAP authentication fails."""
+
+    pass
+
+
 # colors without dependencies
 class colors:
     HEADER = "\033[95m"
@@ -175,158 +188,180 @@ class LDAPEnum:
         )
         return OBJ_TO_SEARCH
 
-    # inspired by themayor
-    def ldap_connect_cred(self, hostname: str, username: str, password: str) -> None:
-        self.begintime = datetime.now()
+    def _probe_server(self, hostname: str):
+        """
+        Establishes initial unauthenticated connection with LDAPS/LDAP fallback.
 
-        # 5 second timeout
+        Returns: ldap3.Server object with connection established
+        Raises: LDAPConnectionError for network failures
+        """
         socket.setdefaulttimeout(5)
-        # tries LDAPS
+
+        # Try LDAPS first (port 636)
         try:
             host_with_port = f"ldaps://{hostname}:636"
-            self.server = Server(
-                str(host_with_port), port=636, use_ssl=True, get_info=ALL
-            )
-            self.ldapconn = Connection(self.server, auto_bind=True)
-        except:
-            try:
-                logging.warning("LDAPS connection failed, attempting LDAP...")
-                host_with_port = f"ldap://{hostname}:389"
-                self.server = Server(
-                    str(host_with_port), port=389, use_ssl=True, get_info=ALL
-                )
-                self.ldapconn = Connection(self.server, auto_bind=True)
-                logging.info("LDAP connection successful")
-            except Exception as e:
-                logging.warning(f"LDAP connection failed: {e}")
-                quit()
+            server = Server(host_with_port, port=636, use_ssl=True, get_info=ALL)
+            # Test connection with auto_bind
+            Connection(server, auto_bind=True)
+            return server
+        except Exception:
+            logging.warning("LDAPS connection failed, attempting LDAP...")
 
-        with open(f"{hostname}.txt", "w") as f:
-            f.write(str(self.server.info))
-        logging.info("Attempting to identify a domain naming convention\n")
-        get_dom_info = str(self.server.info).split("\n")
-        for item in get_dom_info:
-            if "DC=" in item:
-                self.name_context = item.strip()
-                if "ForestDnsZones" in item:
+        # Fallback to LDAP (port 389)
+        try:
+            host_with_port = f"ldap://{hostname}:389"
+            server = Server(host_with_port, port=389, use_ssl=False, get_info=ALL)
+            Connection(server, auto_bind=True)
+            logging.info("LDAP connection successful")
+            return server
+        except Exception as e:
+            raise LDAPConnectionError(f"Failed to connect to {hostname}: {e}")
+
+    def _discover_domain_info(self, server):
+        """
+        Parses domain information directly from server.info in memory.
+
+        Args: server - Connected ldap3.Server object
+        Returns: Dictionary with domain info: {'base_dn': 'DC=corp,DC=local', 'domain_name': 'corp.local'}
+        """
+        logging.info("Attempting to identify domain naming convention")
+
+        # Get server info in memory (no file I/O)
+        server_info = str(server.info)
+        server_info_lines = server_info.split("\n")
+
+        # Parse DC= components
+        name_context = None
+        for line in server_info_lines:
+            if "DC=" in line:
+                name_context = line.strip()
+                if "ForestDnsZones" in line:
                     continue
                 else:
                     break
-        self.long_dc = self.name_context
-        self.dn_val_count = self.name_context.count("DC=")
-        self.name_context = self.name_context.replace("DC=", "")
-        self.name_context = self.name_context.replace(",", ".")
 
-        self.domain = self.name_context
-        domain_contents = self.domain.split(".")
-        logging.info(f"Possible domain name found - {self.name_context}")
-        # print(success(f"Possible domain name found - {self.name_context}"))
-        print(self.long_dc)
+        if not name_context:
+            raise ValueError("Could not find domain naming context in server info")
+
+        # Extract domain information
+        base_dn = name_context  # e.g., "DC=corp,DC=local"
+        dn_val_count = name_context.count("DC=")
+
+        # Convert to domain name format
+        domain_name = name_context.replace("DC=", "").replace(
+            ",", "."
+        )  # e.g., "corp.local"
+
+        logging.info(f"Domain found: {domain_name}")
+        print(base_dn)
         print("")
-        self.ldap_domain_name = f"{self.long_dc}"
+
+        return {
+            "base_dn": base_dn,
+            "domain_name": domain_name,
+            "dn_val_count": dn_val_count,
+        }
+
+    def _perform_authenticated_bind(
+        self,
+        server,
+        domain_info: dict,
+        username: str,
+        password: str,
+        use_ntlm: bool = False,
+    ):
+        """
+        Handles authenticated binding with dynamic NTLM vs SIMPLE auth.
+
+        Args:
+            server: Connected ldap3.Server object
+            domain_info: Dictionary from _discover_domain_info()
+            username: Username for authentication
+            password: Password for authentication
+            use_ntlm: Whether to use NTLM authentication
+
+        Returns: Successfully bound ldap3.Connection object
+        Raises: LDAPAuthenticationError for credential failures
+        """
+        domain_components = domain_info["domain_name"].split(".")
+        domain_prefix = domain_components[domain_info["dn_val_count"] - 2]
+        user_principal = f"{domain_prefix}\\{username}"
+
         try:
-            self.ldapconn = Connection(
-                self.server,
-                user=f"{domain_contents[self.dn_val_count - 2]}\\{username}",
-                password=password,
-                auto_bind=True,
-            )
-            self.ldapconn.bind()
-        except ldap3.core.exceptions.LDAPBindError:
-            print("Invalid credentials. Please try again.")
-            quit()
-        logging.info(f"Connected to {hostname}\n")
-
-    # inspired by themayor
-    def ldap_connect_ntlm(self, hostname: str, username: str, password: str) -> None:
-        try:
-            self.begintime = datetime.now()
-            socket.setdefaulttimeout(5)
-            # tries LDAPS
-            try:
-                host_with_port = f"ldaps://{hostname}:636"
-                self.server = Server(
-                    str(host_with_port), port=636, use_ssl=True, get_info=ALL
-                )
-                self.ldapconn = Connection(self.server, auto_bind=True)
-            except:
-                try:
-                    logging.warning("LDAPS connection failed, attempting LDAP...")
-                    host_with_port = f"ldap://{hostname}:389"
-                    self.server = Server(
-                        str(host_with_port), port=389, use_ssl=True, get_info=ALL
-                    )
-                    self.ldapconn = Connection(self.server, auto_bind=True)
-                    logging.info("LDAP connection successful")
-                except Exception as e:
-                    print(f"Connection failed: {e}")
-                    quit()
-            self.ldapconn = Connection(self.server, auto_bind=True)
-            with open(f"{hostname}.txt", "w") as f:
-                f.write(str(self.server.info))
-            logging.info("Attempting to identify a domain naming convention\n")
-            get_dom_info = str(self.server.info).split("\n")
-            for item in get_dom_info:
-                if "DC=" in item:
-                    self.name_context = item.strip()
-                    if "ForestDnsZones" in item:
-                        continue
-                    else:
-                        break
-            self.long_dc = self.name_context
-            self.dn_val_count = self.name_context.count("DC=")
-            self.name_context = self.name_context.replace("DC=", "")
-            self.name_context = self.name_context.replace(",", ".")
-
-            # with open(f"{hostname}.txt", 'w') as f:
-            #     f.write(str(self.server.info))
-            # print(success("Attempting to identify a domain naming convention for the domain.\n"))
-            # # From msLDAPDump
-            # with open(f"{hostname}.txt", 'r') as f:
-            #     for line in f:
-            #         if line.startswith("    DC="):
-            #             self.name_context = line.strip()
-            #             self.long_dc = self.name_context
-            #             self.dc_val = (self.name_context.count('DC='))
-            #             self.name_context = self.name_context.replace(
-            #                 "DC=", "")
-            #             self.name_context = self.name_context.replace(",", ".")
-            #             if "ForestDnsZones" in self.name_context:
-            #                 continue
-            #             else:
-            #                 break
-
-            self.domain = self.name_context
-            domain_contents = self.domain.split(".")
-            logging.info(f"Possible domain name found - {self.name_context}")
-            # print(success(f"Possible domain name found - {self.name_context}"))
-            self.ldap_domain_name = f"{self.long_dc}"
-            print(self.long_dc)
-            print("")
-            try:
-                self.ldapconn = Connection(
-                    self.server,
-                    user=f"{domain_contents[self.dn_val_count - 2]}\\{username}",
+            if use_ntlm:
+                connection = Connection(
+                    server,
+                    user=user_principal,
                     password=password,
                     auto_bind=True,
                     authentication=NTLM,
                 )
+            else:
+                connection = Connection(
+                    server, user=user_principal, password=password, auto_bind=True
+                )
 
-                self.ldapconn.bind()
-            except:
-                print("Invalid credentials. Please try again.")
-                quit()
+            connection.bind()
+            logging.info(f"Successfully authenticated as {user_principal}")
+            return connection
 
-        except (ipaddress.AddressValueError, socket.herror):
+        except Exception as e:
+            raise LDAPAuthenticationError(
+                f"Invalid credentials for {user_principal}: {e}"
+            )
+
+    def connect(
+        self, hostname: str, username: str, password: str, use_ntlm: bool = False
+    ) -> None:
+        """
+        Main connection orchestrator that centralizes network error handling.
+
+        Args:
+            hostname: Domain controller hostname/IP
+            username: Username for authentication
+            password: Password for authentication
+            use_ntlm: Whether to use NTLM authentication
+        """
+        try:
+            # Initialize timing
+            self.begintime = datetime.now()
+
+            # Step 1: Probe server and establish initial connection
+            self.server = self._probe_server(hostname)
+
+            # Step 2: Discover domain information (no file I/O)
+            domain_info = self._discover_domain_info(self.server)
+
+            # Set instance variables for backward compatibility
+            self.name_context = domain_info["domain_name"]
+            self.long_dc = domain_info["base_dn"]
+            self.dn_val_count = domain_info["dn_val_count"]
+            self.domain = domain_info["domain_name"]
+            self.ldap_domain_name = domain_info["base_dn"]
+
+            # Step 3: Perform authenticated bind
+            self.ldapconn = self._perform_authenticated_bind(
+                self.server, domain_info, username, password, use_ntlm
+            )
+
+            logging.info(f"Connected to {hostname}")
+
+        except (ipaddress.AddressValueError, socket.herror) as e:
             logging.warning(
                 "Invalid IP Address or unable to contact host. Please try again."
             )
-            quit()
+            sys.exit(1)
         except socket.timeout:
             logging.warning(
                 "Timeout while trying to contact the host. Please try again."
             )
-            quit()
+            sys.exit(1)
+        except (LDAPConnectionError, LDAPAuthenticationError) as e:
+            logging.warning(str(e))
+            sys.exit(1)
+        except Exception as e:
+            logging.warning(f"Unexpected error during connection: {e}")
+            sys.exit(1)
 
     def kerberoast_accounts(self) -> None:
         # Query LDAP for Kerberoastable users - searching for SPNs where user is a normal user and account is not disabled
@@ -384,7 +419,7 @@ class LDAPEnum:
         for dc_accounts in self.ldapconn.entries:
             try:
                 print(dc_accounts.dNSHostName)
-            except ldap3.core.exceptions.LDAPCursorAttributeError:
+            except Exception:
                 print(dc_accounts.name)
         print("")
 
@@ -583,11 +618,11 @@ class LDAPEnum:
         OBJ_TO_SEARCH = "(&(objectClass=group))"
         ATTRI_TO_SEARCH = ["sAMAccountName", "name", "whencreated", "whenchanged"]
         query = self.__search_ldap_server(OBJ_TO_SEARCH, ATTRI_TO_SEARCH)
-        if os.path.exists(f"groups.txt"):
-            os.remove(f"groups.txt")
-        with open(f"groups.txt", "a") as f:
+        if os.path.exists("groups.txt"):
+            os.remove("groups.txt")
+        with open("groups.txt", "a") as f:
             logging.info("Output groups to file")
-            logging.debug(f"Query: {query}\n")
+            logging.debug("Query: {query}\n")
             for entry in self.ldapconn.entries:
                 group = str(entry.sAMAccountname)
                 whencreated = str(entry.whencreated)
@@ -699,18 +734,6 @@ class LDAPEnum:
         process = subprocess.run(impacket_args, check=True, stdout=subprocess.PIPE)
         return process.stdout.decode().splitlines()
 
-    def exploit_kerberoastable(
-        self,
-        targetUser: str,
-        username: str,
-        password: str,
-        service: str,
-        output_file: str,
-    ) -> bool:
-        successful = False
-        # stripped_username = self.args.hash
-        print(username)
-
     def main(self) -> None:
         self.banner()
         if self.args.hash:
@@ -718,12 +741,12 @@ class LDAPEnum:
                 self.password = f"aad3b435b51404eeaad3b435b51404ee:{self.args.hash}"
             else:
                 self.password = self.args.hash
-            self.ldap_connect_ntlm(
-                self.args.domaincontroller, self.username, self.password
+            self.connect(
+                self.args.domaincontroller, self.username, self.password, use_ntlm=True
             )
         elif self.args.password:
-            self.ldap_connect_cred(
-                self.args.domaincontroller, self.username, self.password
+            self.connect(
+                self.args.domaincontroller, self.username, self.password, use_ntlm=False
             )
 
         self.kerberoast_accounts()
